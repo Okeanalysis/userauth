@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -14,14 +16,14 @@ type User struct {
 	Email        string    `db:"email" json:"email"`
 	PasswordHash string    `db:"password_hash" json:"-"`
 	CreatedAt    time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt    time.Time `db:updated_at json:updated_at`
+	UpdatedAt    time.Time `db:"updated_at" json:"updated_at"`
 }
 
 var DB *sqlx.DB
 
 func initDB() {
 	var err error
-	DB, err = sqlx.connect("postgres", "user= postgres dbname=database sslmode=disable")
+	DB, err = sqlx.Connect("postgres", "user= postgres password=Emmanuel247@ dbname=userauth sslmode=disable")
 	if err != nil {
 		panic(err)
 	}
@@ -55,6 +57,36 @@ VALUES (:email, :password_hash)`, user)
 func Login(c *gin.Context) {
 	var user User
 	if err := c.ShouldBindBodyWithJSON(&user); err != nil {
-		c
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
+
+	var dbuser User
+	err := DB.Get(&dbuser, "SELECT * FROM users WHERE email=$1", user.Email)
+	if err != nil || bcrypt.CompareHashAndPassword([]byte(dbuser.PasswordHash), []byte(user.PasswordHash)) != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		return
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"id":  dbuser.ID,
+		"exp": time.Now().Add(time.Hour * 24).Unix(),
+	})
+
+	tokenstring, _ := token.SignedString([]byte(jwtSecret))
+
+	c.JSON(http.StatusOK, gin.H{"token": tokenstring})
+
+}
+
+func main() {
+	initDB()
+	defer DB.Close()
+
+	r := gin.Default()
+
+	r.POST("/register", Register)
+	r.POST("/login", Login)
+
+	r.Run(":8080")
 }
