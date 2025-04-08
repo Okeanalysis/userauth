@@ -19,6 +19,11 @@ type User struct {
 	UpdatedAt    time.Time `db:"updated_at" json:"updated_at"`
 }
 
+type Project struct {
+	ID     int `db:"id" json:"id"`
+	UserID int `db:"user_id" json:"user_id"`
+}
+
 var DB *sqlx.DB
 
 func initDB() {
